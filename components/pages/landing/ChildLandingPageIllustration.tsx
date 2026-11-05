@@ -1,0 +1,1171 @@
+"use client";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useInView, Variants } from "framer-motion";
+import {
+    ArrowRight, MessageCircle, Phone, Mail, MapPin, Send, Star, X,
+    ShieldCheck, Wallet, Timer, RefreshCw, Lightbulb, Clock, Award, ImageIcon, Sparkles, Palette, FileCheck,
+    Leaf,
+} from "lucide-react";
+import CallBar from "./CallBar";
+import ContactForm from "@/components/Contact-form";
+import { landingHeroTheme, landingFooterTheme, landingPopupTheme, darkIconTheme } from "@/components/contactFormThemes";
+import CountdownTimer from "./Countdowntimer";
+import GetStartedPopup from "./Getstartedpopup";
+
+/* ══════════════════════════════════════════════════════════════
+   EDIT THESE — contact details, links & image paths
+══════════════════════════════════════════════════════════════ */
+
+
+
+const BRAND = {
+    name: "Bexley Publishing",
+    phone: "(279) 777-0380",
+    phoneHref: "tel:2797770380",
+    email: "info@bexleypublishing.com",
+    headOffice: "2390 Fruitridge Rd Sacramento, CA 95822",
+};
+
+const IMG = {
+    headerLogo: "/images/page/Bexley-Publishing-03.png",
+    footerLogo: "/images/page/Bexley-Publishing-03.png",
+    heroLeft: "/images/page/child-banner-vec-img3.png",
+    heroRight: "/images/page/child-banner-vec-img4.png",
+    agency: "/images/page/e-bok-inner-img.png",
+    cta1: "/images/page/child-cta-img2.png",
+    cta2: "/images/page/child-cta-img.png",
+    process: "/images/page/process-img-m.png",
+    finalLeft: "/images/page/cta-vec-img2.png",
+    finalRight: "/images/page/cta-vec-img1.png",
+    popup: "/images/page/popup-new-side-img.png", // ← replace with your popup character image
+};
+
+/* Lead forms use the shared <ContactForm /> component (sends to the CRM,
+   then redirects to /thank-you). Styles live in contactFormThemes.ts. */
+
+/* Landing page: the only outbound links are these legal pages (footer) + /thank-you after submit */
+const LEGAL_LINKS = [
+    { label: "Terms & Conditions", href: "/terms-of-use" },
+    { label: "Privacy Policy", href: "/privacy-policy" },
+    { label: "Refund Policy", href: "/refund-policy" },
+];
+
+/* Popup opens only on desktop/web; below this width "Get Started" scrolls to the hero form */
+const POPUP_MIN_WIDTH = 1024;
+const POPUP_EVENT = "pb:open-popup";
+const POPUP_HEIGHT = "h-[580px]";
+const OFFER_ENDS_AT = new Date(2026, 10, 1, 0, 0, 0); // months are 0-based: 10 = November
+const DISCOUNT = "50%";
+const SERVICES = ["Editing", "Cover Design", "Formatting", "Publishing", "Marketing"];
+/* ══════════════════════════════════════════════════════════════
+   ANIMATION (same curves as the About page)
+══════════════════════════════════════════════════════════════ */
+const smoothEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+const maskReveal: Variants = {
+    hidden: { clipPath: "polygon(0 0, 100% 0, 100% 0, 0 0)", y: 40 },
+    visible: { clipPath: "polygon(0 0, 100% 0, 100% 100%, 0 100%)", y: 0, transition: { duration: 1, ease: smoothEase } },
+};
+
+const fadeUp: Variants = {
+    hidden: { opacity: 0, y: 30, filter: "blur(4px)" },
+    visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.7, ease: smoothEase } },
+};
+
+const staggerContainer: Variants = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } },
+};
+
+/* ══════════════════════════════════════════════════════════════
+   LIVE CHAT (same as About page)
+══════════════════════════════════════════════════════════════ */
+function openLiveChat() {
+    if (typeof window === "undefined") return;
+    const w = window as any;
+    if (w.LiveChatWidget) { w.LiveChatWidget.call("maximize"); return; }
+    const lc = w.LC_API;
+    if (lc && typeof lc.open_chat_window === "function") { lc.open_chat_window(); return; }
+    const selectors = ["#chat-widget-container button", "[id^='chat-widget']", "iframe[title*='chat' i]"];
+    for (const sel of selectors) {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (el) { el.click(); return; }
+    }
+}
+
+function scrollToForm() {
+    document.getElementById("cb-hero-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/* "Get Started": popup on web, scroll to hero form on mobile/tablet */
+function getStarted() {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia(`(min-width: ${POPUP_MIN_WIDTH}px)`).matches) window.dispatchEvent(new Event(POPUP_EVENT));
+    else scrollToForm();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   IMAGE WITH FALLBACK — shows a soft placeholder until you add files
+══════════════════════════════════════════════════════════════ */
+function Img({ src, alt, className = "" }: { src: string; alt: string; className?: string }) {
+    const [failed, setFailed] = useState(false);
+    if (failed) {
+        return (
+            <div className={`cb-ph ${className}`} role="img" aria-label={alt}>
+                <ImageIcon size={28} />
+                <span>{alt}</span>
+            </div>
+        );
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(true)} />;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DATA
+══════════════════════════════════════════════════════════════ */
+const agencyFeatures = [
+    { icon: ShieldCheck, title: "100% Ownership" },
+    { icon: RefreshCw, title: "Revisions Included" },
+    { icon: Palette, title: "Child-Friendly Art Styles" },
+    { icon: FileCheck, title: "Publishing-Ready Files" },
+];
+
+/* Tab labels can change freely — `slug` matches your existing image file names, so keep it as is.
+   Images: /public/images/children/portfolio/<slug>-<n>.jpg  e.g. children-1.jpg */
+const categories = [
+    { label: "Children's Books", slug: "children" },
+    { label: "Book Covers", slug: "book-covers" },
+    { label: "Storybook Illustrations", slug: "book-illustration" },
+    { label: "Animals", slug: "animals" },
+    { label: "Fantasy", slug: "fantasy" },
+    { label: "Portraits", slug: "portrait" },
+];
+const portfolio: Record<string, string[]> = Object.fromEntries(
+    categories.map((c) => [c.slug, Array.from({ length: 8 }, (_, i) => `/images/children/portfolio/${c.slug}-${i + 1}.jpg`)])
+);
+
+const whyCards = [
+    { icon: RefreshCw, title: "Unlimited Revisions", desc: "We refine your illustrations with your feedback until every scene and character feels right." },
+    { icon: Wallet, title: "Flexible Pricing", desc: "Choose an illustration package that fits your budget, page count, and creative requirements." },
+    { icon: Lightbulb, title: "Original Artwork", desc: "Every illustration is created to match your story, characters, tone, and visual direction." },
+    { icon: Clock, title: "Fast Turnaround", desc: "Clear timelines and an organized process help keep your project moving without unnecessary delays." },
+    { icon: Palette, title: "Multiple Art Styles", desc: "From playful cartoons to detailed storybook art, we adapt the visual style to suit your book." },
+    { icon: Award, title: "100% Ownership", desc: "Once the project is complete, you receive full ownership of the approved artwork and final files." },
+];
+
+const processSteps = [
+    { step: "01", title: "Share Your Vision", desc: "Tell us about your story, characters, audience, preferred art style, and any ideas you already have in mind." },
+    { step: "02", title: "Review Your First Concepts", desc: "Our illustrators create initial sketches and visual concepts so you can see how your characters and scenes are taking shape." },
+    { step: "03", title: "Refine The Artwork", desc: "Share your feedback and we'll revise the illustrations, colors, expressions, and details until everything feels right." },
+    { step: "04", title: "Receive Final Files", desc: "Once approved, your completed illustrations are prepared in high-resolution, publishing-ready formats for print and digital use." },
+];
+
+/* Rating strip: only set `verified: true` once you have a real, verifiable Trustpilot score.
+   While it's false, the strip shows the "Client Feedback" line instead of a rating and review count. */
+const TRUST = { verified: false, label: "Excellent", score: "4.9", reviews: "300+" };
+
+const testimonials = [
+    { name: "Priya Nair", rating: 5, title: "Exactly What I Imagined", quote: "From the first sketch to the final artwork, the team understood exactly what I wanted. The characters felt expressive, the colors were beautiful, and every revision was handled with care." },
+    { name: "Samantha Thornhill", rating: 5, title: "Smooth and Stress-Free Process", quote: "I was unsure about the illustration process at first, but everything was explained clearly. The sketches arrived quickly, feedback was easy, and the final pages looked wonderful." },
+    { name: "Marcus Webb", rating: 5, title: "My Story Finally Came to Life", quote: "The illustrations gave my story the personality it was missing. The characters looked engaging, the scenes felt imaginative, and the finished artwork exceeded my expectations." },
+    { name: "Rachel Bennett", rating: 5, title: "Wonderful Attention to Detail", quote: "Every little detail mattered to me, especially the facial expressions and backgrounds. The illustrator listened carefully and made thoughtful improvements throughout the project." },
+    { name: "Daniel Carter", rating: 5, title: "Professional From Start to Finish", quote: "Communication was clear, deadlines were handled professionally, and the artwork was delivered in a format that was ready for publishing. The entire experience was very straightforward." },
+    { name: "Olivia Morgan", rating: 5, title: "Perfect for My Children's Book", quote: "I wanted something playful, warm, and colorful, and that is exactly what I received. The illustrations fit the tone of my story beautifully and made the book feel complete." },
+    { name: "Jennifer Collins", rating: 5, title: "They Really Listened to My Ideas", quote: "I had a very specific vision for my characters, and the team took the time to understand it. The revisions were thoughtful, and the final result stayed true to my original concept." },
+    { name: "Ethan Brooks", rating: 5, title: "Great Creative Collaboration", quote: "The team brought fresh ideas while still respecting the direction of my manuscript. I especially liked how they improved the scenes without changing the personality of the story." },
+    { name: "Megan Foster", rating: 5, title: "Beautiful Final Artwork", quote: "The finished illustrations were polished, expressive, and full of character. Seeing the complete pages for the first time was exciting, and I was very happy with the final result." },
+];
+
+/* Trustpilot-style square star blocks */
+function TrustStars({ rating, size = 22 }: { rating: number; size?: number }) {
+    return (
+        <div className="cb-tp-stars" aria-label={`Rated ${rating} out of 5`}>
+            {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} className={`cb-tp-star ${i < Math.round(rating) ? "on" : ""}`} style={{ width: size, height: size }}>
+                    <Star size={size * 0.62} fill="white" stroke="white" />
+                </span>
+            ))}
+        </div>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SMALL SHARED PIECES
+══════════════════════════════════════════════════════════════ */
+function Eyebrow({ children, center = false }: { children: ReactNode; center?: boolean }) {
+    return (
+        <div className={`cb-eyebrow ${center ? "center" : ""}`}>
+            <span className="cb-eyebrow-line" />
+            <span className="cb-eyebrow-text">{children}</span>
+            {center && <span className="cb-eyebrow-line" />}
+        </div>
+    );
+}
+
+function ActionButtons({ dark = false }: { dark?: boolean }) {
+    return (
+        <div className="cb-actions">
+            <button type="button" className="cb-btn cb-btn-primary" onClick={getStarted}>
+                Get Started <ArrowRight size={16} />
+            </button>
+            <button type="button" className={`cb-btn ${dark ? "cb-btn-ghost-dark" : "cb-btn-ghost"}`} onClick={openLiveChat}>
+                <MessageCircle size={16} /> Live Chat
+            </button>
+        </div>
+    );
+}
+
+function Wave({ fill, flip = false }: { fill: string; flip?: boolean }) {
+    return (
+        <svg className={`cb-wave ${flip ? "flip" : ""}`} viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0,64 C240,120 480,0 720,48 C960,96 1200,24 1440,72 L1440,120 L0,120 Z" fill={fill} />
+        </svg>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════════════════════ */
+const TICKER_TEXT = "Bring your characters to life with beautiful, creative illustrations. Limited-Time Veterans Day Offer – Claim Your 50% OFF Today!";
+
+function Header() {
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 40);
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, []);
+
+    return (
+        <header className={`cb-header ${scrolled ? "scrolled" : ""}`}>
+            {/* Mobile-only ticker */}
+            <div className="cb-ticker mb-4 -mt-5"  role="marquee" aria-label={TICKER_TEXT}>
+                <div className="cb-ticker-track" aria-hidden="true">
+                    {[0, 1].map((group) => (
+                        <div className="cb-ticker-group" key={group}>
+                            {[0, 1, 2].map((i) => (
+                                <span className="cb-ticker-item" key={i}>
+                                    {TICKER_TEXT}
+                                    <span className="cb-ticker-sep"></span>
+                                </span>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="cb-header-inner">
+                {/* Landing page: logo scrolls back to top instead of leaving the page */}
+                <a href="#top" className="cb-logo" aria-label={`${BRAND.name}, back to top`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={IMG.headerLogo} alt={BRAND.name} className="cb-logo-img" />
+                </a>
+
+                <div className="cb-header-right">
+                    <a href={BRAND.phoneHref} className="cb-header-phone" aria-label={`Call ${BRAND.phone}`}>
+                        <span className="cb-header-phone-icon"><Phone size={15} /></span>
+                        <span className="cb-header-phone-text">{BRAND.phone}</span>
+                    </a>
+                    <button type="button" className="cb-btn cb-btn-primary cb-btn-sm" onClick={getStarted}>Get Started</button>
+                </div>
+            </div>
+        </header>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LEAD FORM (hero)
+══════════════════════════════════════════════════════════════ */
+function LeadForm() {
+    return (
+        <motion.div
+            id="cb-hero-form"
+            className="cb-form-card"
+            initial={{ opacity: 0, y: 40, rotate: 2 }} animate={{ opacity: 1, y: 0, rotate: 0 }}
+            transition={{ duration: 0.9, delay: 0.4, ease: smoothEase }}
+        >
+            <span className="cb-form-dot d1" /><span className="cb-form-dot d2" /><span className="cb-form-dot d3" />
+            <p className="cb-form-title">Limited Time Offer — <span>50% Off</span></p>
+            <ContactForm
+                theme={landingHeroTheme}
+                formLocation="Illustration Landing - Hero"
+                placeholders={{ name: "Your Name", email: "Your Email", phone: "Your Phone Number", message: "Tell Us About Your Book" }}
+                labels={{ name: "Your Name", email: "Your Email", phone: "Your Phone Number", message: "Tell Us About Your Book" }}
+                submitLabel={<>Claim My Discount <Send size={15} /></>}
+            />
+        </motion.div>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CTA BAND (used twice)
+══════════════════════════════════════════════════════════════ */
+function CtaBand({ line, title, image, imageAlt }: { line: string; title: string; image: string; imageAlt: string }) {
+    return (
+        <section className="cb-band">
+            <div className="cb-band-bg" aria-hidden="true" />
+            <span className="cb-band-circle c1" aria-hidden="true" />
+            <span className="cb-band-circle c2" aria-hidden="true" />
+            <div className="cb-band-inner">
+                <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-band-content">
+                    <motion.p variants={fadeUp} className="cb-band-line">{line}</motion.p>
+                    <motion.h2 variants={maskReveal} className="cb-band-h2">{title}</motion.h2>
+                    <motion.div variants={fadeUp} className="cb-band-row">
+                        <div className="cb-actions">
+                            <button type="button" className="cb-btn cb-btn-dark" onClick={getStarted}>Get Started <ArrowRight size={16} /></button>
+                            <button type="button" className="cb-btn cb-btn-ghost" onClick={openLiveChat}><MessageCircle size={16} /> Live Chat</button>
+                        </div>
+                        <a href={BRAND.phoneHref} className="cb-band-call">Call Us: <strong>{BRAND.phone}</strong></a>
+                    </motion.div>
+                </motion.div>
+                <motion.div
+                    className="cb-band-img"
+                    initial={{ opacity: 0, x: 60 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
+                    transition={{ duration: 0.9, ease: smoothEase }}
+                >
+                    <Img src={image} alt={imageAlt} />
+                </motion.div>
+            </div>
+        </section>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PORTFOLIO
+══════════════════════════════════════════════════════════════ */
+function Portfolio() {
+    const [active, setActive] = useState(categories[0].slug);
+    const activeLabel = categories.find((c) => c.slug === active)?.label ?? "";
+    const items = portfolio[active].slice(0, 12);
+    return (
+        <section id="portfolio" className="cb-portfolio">
+            <div className="cb-inner">
+                <div className="cb-section-head center">
+                    <Eyebrow center>Our Portfolio</Eyebrow>
+                    <motion.h2 variants={maskReveal} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-h2">
+                        EXPLORE OUR CREATIVE <span className="accent">BOOK ILLUSTRATIONS</span>
+                    </motion.h2>
+                    <p className="cb-sub">Take a look at some of the stories we've helped bring to life through custom artwork, expressive characters, and imaginative visual storytelling.</p>
+                </div>
+
+                <div className="cb-tabs" role="tablist" aria-label="Illustration categories">
+                    {categories.map((c) => (
+                        <button
+                            key={c.slug} type="button" role="tab" aria-selected={active === c.slug}
+                            className={`cb-tab ${active === c.slug ? "active" : ""}`} onClick={() => setActive(c.slug)}
+                        >
+                            {c.label}
+                            {active === c.slug && <motion.span layoutId="cb-tab-pill" className="cb-tab-pill" transition={{ duration: 0.4, ease: smoothEase }} />}
+                        </button>
+                    ))}
+                </div>
+
+                <motion.div layout className="cb-gallery">
+                    <AnimatePresence mode="popLayout">
+                        {items.map((src, i) => (
+                            <motion.div
+                                key={src} layout className="cb-gallery-item"
+                                initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
+                                transition={{ duration: 0.45, delay: i * 0.03, ease: smoothEase }}
+                            >
+                                <Img src={src} alt={`${activeLabel} illustration ${i + 1}`} />
+                                <div className="cb-gallery-overlay"><span>{activeLabel}</span></div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                </motion.div>
+
+                <div className="cb-center-actions"><ActionButtons dark /></div>
+            </div>
+        </section>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TESTIMONIAL SLIDER
+══════════════════════════════════════════════════════════════ */
+function Testimonials() {
+    const [perView, setPerView] = useState(3);
+    const [index, setIndex] = useState(0);
+    const pages = Math.max(1, testimonials.length - perView + 1);
+
+    useEffect(() => {
+        const calc = () => setPerView(window.innerWidth < 700 ? 1 : window.innerWidth < 1100 ? 2 : 3);
+        calc();
+        window.addEventListener("resize", calc);
+        return () => window.removeEventListener("resize", calc);
+    }, []);
+
+    useEffect(() => { if (index > pages - 1) setIndex(0); }, [pages, index]);
+
+    useEffect(() => {
+        const t = setInterval(() => setIndex((i) => (i + 1) % pages), 5000);
+        return () => clearInterval(t);
+    }, [pages]);
+
+    return (
+        <section className="cb-testimonials">
+            <div className="cb-inner">
+                <div className="cb-section-head center">
+                    <Eyebrow center>Testimonials</Eyebrow>
+                    <motion.h2 variants={maskReveal} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-h2 light">
+                        WHAT OUR <span className="accent">AUTHORS ARE SAYING</span>
+                    </motion.h2>
+                    <p className="cb-sub light">Writers trust us to turn their ideas into polished, memorable illustrations. Here's what authors have shared about working with our team.</p>
+                </div>
+
+                {/* Trustpilot-style strip — shows a real rating only when TRUST.verified is true */}
+                <motion.div className="cb-tp-summary" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
+                    {TRUST.verified ? (
+                        <>
+                            <span className="cb-tp-label">{TRUST.label}</span>
+                            <TrustStars rating={5} size={30} />
+                            <span className="cb-tp-meta">Rated <strong>{TRUST.score}</strong> / 5 based on <strong>{TRUST.reviews} reviews</strong></span>
+                            <span className="cb-tp-brand"><Star size={20} fill="#03D389" stroke="#03D389" /> Trustpilot</span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="cb-tp-label">Client Feedback</span>
+                            <TrustStars rating={5} size={30} />
+                            <span className="cb-tp-meta">Trusted by authors for creativity, communication, and reliable delivery.</span>
+                        </>
+                    )}
+                </motion.div>
+
+                <div className="cb-slider">
+                    <div className="cb-slider-track" style={{ transform: `translateX(-${(index * 100) / perView}%)` }}>
+                        {testimonials.map(({ name, rating, title, quote }) => (
+                            <div key={name} className="cb-slide" style={{ flex: `0 0 ${100 / perView}%` }}>
+                                <article className="cb-tp-card">
+                                    <header className="cb-tp-head">
+                                        <span className="cb-tp-avatar" aria-hidden="true">{name.split(" ").map((n) => n[0]).join("").slice(0, 2)}</span>
+                                        <div className="cb-tp-who">
+                                            <p className="cb-tp-name">{name}</p>
+                                            <p className="cb-tp-loc">Author</p>
+                                        </div>
+                                    </header>
+                                    <div className="cb-tp-rowline">
+                                        <TrustStars rating={rating} size={20} />
+                                    </div>
+                                    <h3 className="cb-tp-title">{title}</h3>
+                                    <p className="cb-tp-text">{quote}</p>
+                                </article>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="cb-dots">
+                    {Array.from({ length: pages }).map((_, i) => (
+                        <button key={i} type="button" aria-label={`Show testimonial ${i + 1}`} className={`cb-dot ${i === index ? "active" : ""}`} onClick={() => setIndex(i)} />
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   GET STARTED POPUP (web only — opened by getStarted())
+══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════════════════════════ */
+function Footer() {
+    return (
+        <footer id="contact" className="cb-footer">
+            <div className="cb-footer-inner">
+                <div className="cb-footer-brand">
+                    <a href="#top" className="cb-logo" aria-label={`${BRAND.name}, back to top`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={IMG.footerLogo} alt={BRAND.name} className="cb-logo-img footer" />
+                    </a>
+                    <p>We help authors transform their ideas into professionally illustrated books with memorable characters, engaging scenes, and artwork created to complement every story.</p>
+                </div>
+
+                <div className="cb-footer-col">
+                    <p className="cb-footer-h">Address</p>
+                    <p className="cb-footer-line"><MapPin size={15} /> <span>{BRAND.headOffice}</span></p>
+                    <p className="cb-footer-h">Phone</p>
+                    <a className="cb-footer-line" href={BRAND.phoneHref}><Phone size={15} /> <span>{BRAND.phone}</span></a>
+                    <p className="cb-footer-h">Email</p>
+                    <a className="cb-footer-line" href={`mailto:${BRAND.email}`}><Mail size={15} /> <span>{BRAND.email}</span></a>
+                </div>
+
+                <div className="cb-footer-col">
+                    <p className="cb-footer-h big">Get In Touch</p>
+                    <ContactForm
+                        theme={landingFooterTheme}
+                        formLocation="Illustration Landing - Footer"
+                        placeholders={{ name: "Your Name", email: "Your Email", phone: "Your Phone", message: "Tell Us About Your Project" }}
+                        labels={{ name: "Your Name", email: "Your Email", phone: "Your Phone", message: "Tell Us About Your Project" }}
+                        submitLabel={<>Send Message <Send size={15} /></>}
+                    />
+                </div>
+            </div>
+            <div className="cb-footer-bottom">
+                <p>© {new Date().getFullYear()} {BRAND.name}. All rights reserved.</p>
+                <nav aria-label="Legal">{LEGAL_LINKS.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}</nav>
+            </div>
+        </footer>
+    );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PAGE
+══════════════════════════════════════════════════════════════ */
+export default function ChildLandingPageIllustration() {
+    const agencyRef = useRef<HTMLDivElement>(null);
+    const agencyInView = useInView(agencyRef, { once: true, margin: "-100px" });
+
+    return (
+        <>
+            <style>{`
+                /* ═══ TOKENS & GLOBAL ═══ */
+                .cb-main {
+                    --red: #e8391d; --red-dark: #c0271a; --ink: #05070f; --cream: #faf9f7;
+                    --sun: #ffc83d; --sky: #4fb3ff; --grey: #6b7280;
+                    width: 100%; overflow: hidden; font-family: var(--font-raleway), 'Raleway', Arial, sans-serif; color: var(--ink); background: var(--cream);
+                }
+                .cb-main *, .cb-main *::before, .cb-main *::after { box-sizing: border-box; }
+                .cb-main a { text-decoration: none; color: inherit; }
+                .cb-main :focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; border-radius: 6px; }
+                .cb-inner { max-width: 1240px; margin: 0 auto; padding: 0 64px; position: relative; z-index: 2; }
+
+                .cb-ph {
+                    width: 100%; height: 100%; min-height: 160px; display: flex; flex-direction: column; gap: 8px;
+                    align-items: center; justify-content: center; text-align: center; padding: 16px;
+                    background: repeating-linear-gradient(45deg, rgba(232,57,29,0.06) 0 12px, rgba(255,200,61,0.08) 12px 24px);
+                    color: rgba(232,57,29,0.6); font-size: 12px; font-weight: 700; border-radius: inherit;
+                }
+
+                .cb-wave { position: absolute; left: 0; bottom: -1px; width: 100%; height: 90px; display: block; z-index: 3; }
+                .cb-wave.flip { top: -1px; bottom: auto; transform: rotate(180deg); }
+
+                /* ═══ EYEBROW / HEADINGS ═══ */
+                .cb-eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+                .cb-eyebrow.center { justify-content: center; }
+                .cb-eyebrow-line { display: block; width: 32px; height: 2px; background: var(--red); flex-shrink: 0; }
+                .cb-eyebrow-text { color: var(--red); font-weight: 900; font-size: 11px; text-transform: uppercase; letter-spacing: 0.28em; }
+
+                .cb-h2 { font-weight: 900; text-transform: uppercase; line-height: 1.05; font-size: clamp(2rem, 3.5vw, 3rem); color: var(--ink); }
+                .cb-h2.light { color: white; }
+                .cb-h2 .accent { color: var(--red); }
+                .cb-section-head { margin-bottom: 56px; }
+                .cb-section-head.center { text-align: center; max-width: 820px; margin-left: auto; margin-right: auto; }
+                .cb-sub { color: var(--grey); font-size: 15px; line-height: 1.75; margin-top: 18px; }
+                .cb-sub.light { color: rgba(255,255,255,0.6); }
+
+                /* ═══ BUTTONS ═══ */
+                .cb-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+                .cb-center-actions { display: flex; justify-content: center; margin-top: 52px; }
+                .cb-btn {
+                    display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 2px solid transparent;
+                    font-family: inherit; font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+                    padding: 15px 28px; border-radius: 12px; cursor: pointer;
+                    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, gap 0.2s ease, box-shadow 0.2s ease;
+                }
+                .cb-btn:hover { gap: 14px; }
+                .cb-btn-primary { background: var(--red); color: white; }
+                .cb-btn-primary:hover { background: var(--red-dark); box-shadow: 0 10px 40px rgba(232,57,29,0.4); }
+                .cb-btn-dark { background: var(--ink); color: white; }
+                .cb-btn-dark:hover { background: white; color: var(--red); }
+                .cb-btn-ghost { background: transparent; color: white; border-color: rgba(255,255,255,0.6); }
+                .cb-btn-ghost:hover { background: white; color: var(--ink); border-color: white; }
+                .cb-btn-ghost-dark { background: transparent; color: var(--ink); border-color: var(--ink); }
+                .cb-btn-ghost-dark:hover { background: var(--ink); color: white; }
+                .cb-btn-sm { padding: 11px 20px; font-size: 11px; }
+
+                /* ═══ HEADER ═══ */
+                .cb-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; transition: background 0.3s ease, box-shadow 0.3s ease, padding 0.3s ease; padding: 20px 0; }
+                .cb-header.scrolled { background: rgba(5,7,15,0.92); backdrop-filter: blur(12px); box-shadow: 0 8px 30px rgba(0,0,0,0.25); padding: 12px 0; }
+                .cb-header-inner { max-width: 1320px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+                .cb-logo { display: inline-flex; align-items: center; gap: 10px; color: white; }
+                .cb-logo-img { height: 52px; width: auto; display: block; object-fit: contain; transition: height 0.3s ease; }
+                .cb-header.scrolled .cb-logo-img { height: 44px; }
+                .cb-logo-img.footer { height: 64px; }
+                .cb-header-right { display: flex; align-items: center; gap: 18px; }
+                .cb-header-phone { display: inline-flex; align-items: center; gap: 10px; color: white !important; font-weight: 700; font-size: 14px; }
+                .cb-header-phone-icon { width: 36px; height: 36px; border-radius: 50%; background: rgba(232,57,29,0.15); color: var(--red); display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s ease, color 0.2s ease; }
+                .cb-header-phone:hover .cb-header-phone-icon { background: var(--red); color: white; }
+
+                /* ═══ HERO ═══ */
+                .cb-hero { position: relative; background: var(--ink); padding: 170px 0 170px; overflow: hidden; }
+                .cb-hero-glow { position: absolute; top: 40%; left: 30%; width: 800px; height: 800px; border-radius: 50%; transform: translate(-50%, -50%); background: rgba(232,57,29,0.14); filter: blur(150px); pointer-events: none; }
+                .cb-hero-dots { position: absolute; inset: 0; opacity: 0.05; background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 30px 30px; pointer-events: none; }
+                .cb-hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center; }
+                .cb-hero-h1 { font-weight: 900; color: white; text-transform: uppercase; line-height: 1; font-size: clamp(2.4rem, 4.2vw, 4rem); margin-bottom: 28px; }
+                .cb-hero-h1 .accent { color: var(--red); display: block; }
+                .cb-hero-h1 .scribble { position: relative; display: inline-block; }
+                .cb-hero-h1 .scribble svg { position: absolute; left: -2%; bottom: -14px; width: 104%; height: 18px; }
+                .cb-hero-sub { color: rgba(255,255,255,0.65); line-height: 1.85; max-width: 520px; font-size: clamp(0.95rem, 1.1vw, 1.05rem); margin-bottom: 36px; }
+                .cb-hero-perks { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 36px; }
+                .cb-hero-perk { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; }
+                .cb-hero-perk svg { color: var(--sun); }
+
+                .cb-hero-kid { position: absolute; z-index: 1; pointer-events: none; }
+                .cb-hero-kid img, .cb-hero-kid .cb-ph { width: 100%; height: 100%; object-fit: contain; }
+                .cb-hero-kid .cb-ph { display: none; }
+                .cb-hero-kid.left { left: 1%; bottom: 90px; width: 150px; height: 190px; z-index: 50; }
+                .cb-hero-kid.right { right: 1%; top: 150px; width: 170px; height: 210px; z-index: 50; }
+
+                .cb-float { position: absolute; border-radius: 50%; pointer-events: none; z-index: 1; }
+                .cb-float.f1 { width: 22px; height: 22px; background: var(--sun); top: 22%; left: 46%; }
+                .cb-float.f2 { width: 14px; height: 14px; background: var(--sky); top: 70%; left: 8%; }
+                .cb-float.f3 { width: 34px; height: 34px; border: 3px solid var(--red); top: 16%; right: 18%; }
+                .cb-float.f4 { width: 12px; height: 12px; background: var(--red); bottom: 26%; right: 42%; }
+
+                /* Hero form card (the form inside is styled by landingHeroTheme) */
+                .cb-form-card { position: relative; z-index: 2; background: white; border-radius: 40px 40px 40px 12px; padding: 44px 40px 40px; box-shadow: 0 40px 100px rgba(0,0,0,0.45); }
+                .cb-form-card::before { content: ""; position: absolute; inset: -14px 14px 14px -14px; border: 3px dashed rgba(255,200,61,0.55); border-radius: 44px 44px 44px 16px; z-index: -1; }
+                .cb-form-dot { position: absolute; border-radius: 50%; }
+                .cb-form-dot.d1 { width: 18px; height: 18px; background: var(--sun); top: -8px; right: 60px; }
+                .cb-form-dot.d2 { width: 12px; height: 12px; background: var(--sky); top: 30px; right: -6px; }
+                .cb-form-dot.d3 { width: 10px; height: 10px; background: var(--red); bottom: 60px; left: -5px; }
+                .cb-form-title { font-weight: 900; font-size: 20px; text-transform: uppercase; margin-bottom: 22px; line-height: 1.2; }
+                .cb-form-title span { color: var(--red); }
+
+                /* ═══ AGENCY ═══ */
+                .cb-agency { position: relative; padding: 120px 0; background: var(--cream); }
+                .cb-agency-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+                .cb-agency-img { position: relative; aspect-ratio: 5/4; }
+                .cb-agency-img img, .cb-agency-img .cb-ph { width: 100%; height: 100%; object-fit: contain; border-radius: 24px; }
+                .cb-agency-blob { position: absolute; inset: 8% 6% 0 10%; background: rgba(255,200,61,0.25); border-radius: 46% 54% 42% 58% / 55% 45% 55% 45%; z-index: -1; }
+                .cb-agency-body { color: var(--grey); line-height: 1.85; font-size: 0.95rem; margin: 24px 0 32px; padding-bottom: 32px; border-bottom: 1px solid #e8e4dd; }
+                .cb-feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 28px; }
+                .cb-feature { display: flex; align-items: center; gap: 14px; }
+                .cb-feature-icon { width: 46px; height: 46px; border-radius: 12px; background: rgba(232,57,29,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--red); }
+                .cb-feature p { font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.35; }
+
+                /* ═══ CTA BAND ═══ */
+                .cb-band { position: relative; background: var(--red); overflow: hidden; }
+                .cb-band-bg { position: absolute; inset: 0; opacity: 0.08; background-image: radial-gradient(#fff 1.5px, transparent 1.5px); background-size: 26px 26px; }
+                .cb-band-circle { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); }
+                .cb-band-circle.c1 { width: 360px; height: 360px; left: -120px; top: -140px; }
+                .cb-band-circle.c2 { width: 220px; height: 220px; left: 40%; bottom: -130px; }
+                .cb-band-inner { max-width: 1200px; margin: 0 auto; padding: 0 64px; display: grid; grid-template-columns: 1.4fr 1fr; align-items: center; gap: 40px; position: relative; z-index: 2; min-height: 320px; }
+                .cb-band-content { padding: 64px 0; }
+                .cb-band-line { color: rgba(255,255,255,0.85); font-size: 18px; line-height: 1.5; max-width: 520px; margin-bottom: 10px; }
+                .cb-band-h2 { color: white; font-weight: 900; font-size: clamp(2rem, 3.4vw, 3rem); line-height: 1.05; margin-bottom: 28px; }
+                .cb-band-row { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+                .cb-band-call { color: rgba(255,255,255,0.85); font-size: 14px; }
+                .cb-band-call strong { color: white; font-weight: 900; }
+                .cb-band-img { align-self: end; height: 320px;  display: flex; align-items: flex-end; justify-content: center; }
+                .cb-band-img img { max-height: 100%; max-width: 100%; object-fit: cover; }
+                .cb-band-img .cb-ph { height: 260px; border-radius: 24px 24px 0 0; background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+
+                /* ═══ PORTFOLIO ═══ */
+                .cb-portfolio { position: relative; padding: 120px 0; background: white; }
+                .cb-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 44px; }
+                .cb-tab { position: relative; background: none; border: none; font-family: inherit; font-weight: 700; font-size: 13px; color: var(--ink); padding: 10px 18px; border-radius: 999px; cursor: pointer; z-index: 0; transition: color 0.25s ease; }
+                .cb-tab:hover { color: var(--red); }
+                .cb-tab.active { color: white; }
+                .cb-tab-pill { position: absolute; inset: 0; background: var(--red); border-radius: 999px; z-index: -1; }
+                .cb-gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+                .cb-gallery-item { position: relative; aspect-ratio: 1/1; border-radius: 18px; overflow: hidden; background: #f3f0ea; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+                .cb-gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s ease; }
+                .cb-gallery-item:hover img { transform: scale(1.08); }
+                .cb-gallery-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(5,7,15,0.75), transparent 55%); opacity: 0; display: flex; align-items: flex-end; padding: 16px; transition: opacity 0.3s ease; }
+                .cb-gallery-overlay span { color: white; font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+                .cb-gallery-item:hover .cb-gallery-overlay { opacity: 1; }
+
+                /* ═══ WHY ═══ */
+                .cb-why { position: relative; padding: 120px 0; background: var(--cream); }
+                .cb-why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+                .cb-why-card { background: white; border-radius: 20px; padding: 32px; border: 1px solid #f0ece5; box-shadow: 0 4px 20px rgba(0,0,0,0.04); transition: border-color 0.3s ease, box-shadow 0.4s ease, transform 0.4s ease; }
+                .cb-why-card:hover { border-color: rgba(232,57,29,0.35); box-shadow: 0 18px 44px rgba(0,0,0,0.1); transform: translateY(-4px); }
+                .cb-why-top { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+                .cb-why-icon { width: 52px; height: 52px; border-radius: 14px; background: rgba(232,57,29,0.1); color: var(--red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.3s ease, color 0.3s ease; }
+                .cb-why-card:hover .cb-why-icon { background: var(--red); color: white; }
+                .cb-why-title { font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.3; }
+                .cb-why-desc { color: var(--grey); font-size: 14px; line-height: 1.7; }
+
+                /* ═══ PROCESS ═══ */
+                .cb-process { position: relative; padding: 120px 0; background: var(--ink); }
+                .cb-process-dots { position: absolute; inset: 0; opacity: 0.04; background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 30px 30px; }
+                .cb-process-grid { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 80px; align-items: start; }
+                .cb-process-left { position: sticky; top: 120px; }
+                .cb-process-left .cb-sub { color: rgba(255,255,255,0.55); max-width: 380px; }
+                .cb-process-img { margin-top: 40px; aspect-ratio: 1/1; max-width: 420px; position: relative; }
+                .cb-process-img::before { content: ""; position: absolute; inset: 8%; border-radius: 50%; background: rgba(232,57,29,0.18); filter: blur(40px); }
+                .cb-process-img img, .cb-process-img .cb-ph { position: relative; width: 100%; height: 100%; object-fit: contain; border-radius: 24px; }
+                .cb-process-img .cb-ph { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.4); }
+                .cb-steps { display: flex; flex-direction: column; gap: 14px; }
+                .cb-step { display: grid; grid-template-columns: 76px 1fr; gap: 20px; padding: 28px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); transition: border-color 0.4s ease; }
+                .cb-step:hover { border-color: rgba(232,57,29,0.5); }
+                .cb-step-num { font-weight: 900; font-size: 44px; line-height: 1; color: var(--red); }
+                .cb-step-num small { display: block; font-size: 10px; letter-spacing: 0.25em; color: rgba(255,255,255,0.35); margin-top: 6px; }
+                .cb-step h3 { color: white; font-weight: 900; text-transform: uppercase; font-size: 17px; letter-spacing: 0.04em; margin-bottom: 10px; }
+                .cb-step p { color: rgba(255,255,255,0.55); font-size: 14px; line-height: 1.7; }
+                .cb-steps .cb-btn { align-self: flex-start; margin-top: 20px; }
+
+                /* ═══ TESTIMONIALS ═══ */
+                .cb-testimonials { position: relative; padding: 120px 0; background: #111; }
+                .cb-slider { overflow: hidden; margin: 0 -12px; }
+                .cb-slider-track { display: flex; transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+                .cb-slide { padding: 0 12px; }
+                /* Trustpilot-style stars */
+                .cb-tp-stars { display: inline-flex; gap: 3px; }
+                .cb-tp-star { display: inline-flex; align-items: center; justify-content: center; background: #dcdce6; border-radius: 2px; }
+                .cb-tp-star.on { background: #03D389; }
+
+                /* Summary bar */
+                .cb-tp-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 20px; margin: -16px auto 48px; padding: 18px 28px; max-width: 860px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; }
+                .cb-tp-label { color: white; font-weight: 900; font-size: 22px; }
+                .cb-tp-meta { color: rgba(255,255,255,0.65); font-size: 14px; }
+                .cb-tp-meta strong { color: white; }
+                .cb-tp-brand { display: inline-flex; align-items: center; gap: 6px; color: white; font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
+
+                /* Review card */
+                .cb-tp-card { height: 100%; display: flex; flex-direction: column; background: white; border-radius: 10px; padding: 26px; border: 1px solid #e5e5ec; transition: box-shadow 0.35s ease, transform 0.35s ease; }
+                .cb-tp-card:hover { box-shadow: 0 18px 40px rgba(0,0,0,0.35); transform: translateY(-3px); }
+                .cb-tp-head { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #efeff4; }
+                .cb-tp-avatar { width: 42px; height: 42px; border-radius: 50%; background: rgba(110, 39, 28, 0.12); color: #03D389; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+                .cb-tp-name { font-weight: 800; font-size: 15px; color: #191919; }
+                .cb-tp-loc { font-size: 12px; color: #6c6c85; margin-top: 2px; }
+                .cb-tp-rowline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+                .cb-tp-title { font-weight: 800; font-size: 16px; color: #191919; margin-bottom: 8px; line-height: 1.35; }
+                .cb-tp-text { color: #3f3f55; font-size: 14.5px; line-height: 1.7; flex: 1; }
+                .cb-dots { display: flex; justify-content: center; gap: 10px; margin-top: 40px; }
+                .cb-dot { width: 10px; height: 10px; border-radius: 999px; border: none; background: rgba(255,255,255,0.25); cursor: pointer; transition: width 0.35s ease, background 0.35s ease; padding: 0; }
+                .cb-dot.active { width: 30px; background: var(--red); }
+
+                /* ═══ FINAL CTA ═══ */
+                .cb-final { position: relative; padding: 120px 0; background: var(--cream); }
+                .cb-final-grid { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 32px; align-items: center; }
+                .cb-final-img { aspect-ratio: 4/5; }
+                .cb-final-img img, .cb-final-img .cb-ph { width: 100%; height: 100%; object-fit: contain; border-radius: 24px; }
+                .cb-final-center { text-align: center; }
+                .cb-final-center .cb-sub { margin-bottom: 32px; }
+                .cb-final-center .cb-actions { justify-content: center; }
+
+                /* ═══ FOOTER ═══ (the form inside is styled by landingFooterTheme) */
+                .cb-footer { background: var(--ink); color: rgba(255,255,255,0.6); border-top: 4px solid var(--red); }
+                .cb-footer-inner { max-width: 1200px; margin: 0 auto; padding: 88px 64px 56px; display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 56px; }
+                .cb-footer-brand p { margin-top: 22px; font-size: 14px; line-height: 1.8; max-width: 320px; }
+                .cb-footer-h { color: white; font-weight: 900; font-size: 13px; text-transform: uppercase; letter-spacing: 0.14em; margin: 22px 0 10px; }
+                .cb-footer-h:first-child { margin-top: 0; }
+                .cb-footer-h.big { font-size: 20px; letter-spacing: 0.04em; margin-bottom: 20px; }
+                .cb-footer-line { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.6; margin-bottom: 8px; transition: color 0.2s ease; }
+                .cb-footer-line svg { color: var(--red); flex-shrink: 0; margin-top: 3px; }
+                a.cb-footer-line:hover { color: white; }
+                .cb-footer-bottom { max-width: 1200px; margin: 0 auto; padding: 24px 64px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+                .cb-footer-bottom nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; }
+                .cb-footer-bottom a:hover { color: var(--red); }
+
+                /* ═══ GET STARTED POPUP (web only) ═══ (the form inside is styled by landingPopupTheme) */
+                .cb-pop-backdrop {
+                    position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 40px;
+                    background: rgba(5,7,15,0.35); backdrop-filter: blur(12px) saturate(1.1); -webkit-backdrop-filter: blur(12px) saturate(1.1);
+                }
+                .cb-pop { position: relative; display: grid; grid-template-columns: auto 330px 380px; align-items: end; gap: 0; max-height: calc(100vh - 80px); }
+
+                .cb-pop-side { writing-mode: vertical-rl; transform: rotate(180deg); display: flex; flex-direction: column; gap: 4px; align-self: end; margin-right: 14px; padding-bottom: 4px; }
+                .cb-pop-side span { color: white; font-size: 15px; font-weight: 500; letter-spacing: 0.02em; text-shadow: 0 2px 16px rgba(0,0,0,0.6); }
+                .cb-pop-side strong { color: white; font-size: 34px; font-weight: 900; line-height: 1; text-shadow: 0 4px 24px rgba(0,0,0,0.65); }
+
+                .cb-pop-main { position: relative; z-index: 2; }
+                .cb-pop-h { position: relative; color: white; font-weight: 900; font-size: 23px; line-height: 1.15; margin-bottom: 16px; width: 360px; text-shadow: 0 2px 18px rgba(0,0,0,0.6); }
+                .cb-pop-h::before { content: ""; position: absolute; inset: -18px -24px -14px -24px; background: rgba(5,7,15,0.35); filter: blur(22px); border-radius: 40px; z-index: -1; }
+                .cb-pop-h span { display: block; font-weight: 400; font-size: 21px; margin-top: 6px; }
+
+                .cb-pop-art { position: relative; height: 460px; margin-left: -60px; align-self: center; z-index: 1; }
+                .cb-pop-panel {
+                    position: absolute; top: -40px; right: 0; width: 290px; height: 400px; border-radius: 4px;
+                    background: #A22E1E; border: 1px solid rgba(232,57,29,0.35);
+                    background-image: radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 18px 18px;
+                    box-shadow: 0 30px 70px rgba(0,0,0,0.35);
+                }
+                .cb-pop-close {
+                    position: absolute; top: 6px; right: 6px; width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+                    background: transparent; color: white; display: flex; align-items: center; justify-content: center; transition: background 0.2s ease;
+                }
+                .cb-pop-close:hover { background: var(--red); }
+                .cb-pop-img { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom center; z-index: 2; filter: drop-shadow(0 20px 30px rgba(0,0,0,0.35)); }
+                .cb-pop-art .cb-ph.cb-pop-img { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); width: 80%; left: 10%; height: 80%; border-radius: 12px; }
+
+                @media (min-width: 1800px) {
+                    .cb-pop { grid-template-columns: auto 400px 460px; }
+                    .cb-pop-h { width: 440px; font-size: 28px; }
+                    .cb-pop-h span { font-size: 25px; }
+                    .cb-pop-art { height: 560px; }
+                    .cb-pop-panel { width: 350px; height: 490px; }
+                }
+                @media (max-height: 640px) {
+                    .cb-pop-art { height: 380px; }
+                    .cb-pop-panel { height: 330px; }
+                }
+                /* Popup is web-only */
+                @media (max-width: 1023px) { .cb-pop-backdrop { display: none; } }
+
+                /* ══════════════════════════════════════════
+                   1800px+ — Full HD / 4K
+                ══════════════════════════════════════════ */
+                @media (min-width: 1800px) {
+                    .cb-inner, .cb-band-inner { max-width: 1640px; padding: 0 120px; }
+                    .cb-header-inner { max-width: 1760px; }
+                    .cb-footer-inner, .cb-footer-bottom { max-width: 1640px; padding-left: 120px; padding-right: 120px; }
+                    .cb-hero { padding: 220px 0 200px; }
+                    .cb-hero-h1 { font-size: clamp(4rem, 4vw, 6rem); }
+                    .cb-hero-sub { font-size: 1.2rem; max-width: 640px; }
+                    .cb-agency, .cb-portfolio, .cb-why, .cb-process, .cb-testimonials, .cb-final { padding: 160px 0; }
+                    .cb-h2 { font-size: clamp(3rem, 3.2vw, 4.4rem); }
+                    .cb-sub, .cb-agency-body, .cb-why-desc, .cb-step p, .cb-tp-text { font-size: 17px; }
+                    .cb-why-card, .cb-step, .cb-tp-card { padding: 36px; }
+                    .cb-btn { font-size: 14px; padding: 18px 36px; }
+                    .cb-hero-kid.left { width: 210px; height: 260px; }
+                    .cb-hero-kid.right { width: 230px; height: 280px; }
+                }
+
+                /* ══════════════════════════════════════════
+                   ≤1280px — Laptop
+                ══════════════════════════════════════════ */
+                @media (max-width: 1280px) {
+                    .cb-hero-kid { display: none; }
+                }
+
+                /* ══════════════════════════════════════════
+                   ≤1100px — Small Laptop
+                ══════════════════════════════════════════ */
+                @media (max-width: 1100px) {
+                    .cb-inner, .cb-band-inner { padding: 0 40px; }
+                    .cb-footer-inner { padding: 72px 40px 48px; grid-template-columns: 1fr 1fr; }
+                    .cb-footer-inner > :last-child { grid-column: 1 / -1; }
+                    .cb-footer-bottom { padding: 24px 40px; }
+                    .cb-hero-grid { gap: 40px; }
+                    .cb-agency-grid, .cb-process-grid { gap: 52px; }
+                    .cb-gallery { grid-template-columns: repeat(3, 1fr); }
+                    .cb-why-grid { grid-template-columns: repeat(2, 1fr); }
+                    .cb-final-grid { grid-template-columns: 1fr; }
+                    .cb-final-img { display: none; }
+                }
+
+                /* ══════════════════════════════════════════
+                   ≤900px — Tablet
+                ══════════════════════════════════════════ */
+                @media (max-width: 900px) {
+                    .cb-hero { padding: 140px 0 140px; }
+                    .cb-hero-grid { grid-template-columns: 1fr; }
+                    .cb-hero-copy { text-align: center; }
+                    .cb-hero-copy .cb-eyebrow { justify-content: center; }
+                    .cb-hero-sub { margin-left: auto; margin-right: auto; }
+                    .cb-hero-copy .cb-actions, .cb-hero-perks { justify-content: center; }
+                    .cb-form-card { max-width: 560px; width: 100%; margin: 0 auto; }
+                    .cb-agency, .cb-portfolio, .cb-why, .cb-process, .cb-testimonials, .cb-final { padding: 88px 0; }
+                    .cb-agency-grid { grid-template-columns: 1fr; }
+                    .cb-agency-img { max-width: 520px; margin: 0 auto; width: 100%; }
+                    .cb-band-inner { grid-template-columns: 1fr; text-align: center; min-height: 0; }
+                    .cb-band-content { padding: 64px 0 24px; }
+                    .cb-band-line { margin-left: auto; margin-right: auto; }
+                    .cb-band-row, .cb-band-row .cb-actions { justify-content: center; }
+                    .cb-band-img { height: 240px; }
+                    .cb-process-grid { grid-template-columns: 1fr; }
+                    .cb-process-left { position: static; text-align: center; }
+                    .cb-process-left .cb-eyebrow { justify-content: center; }
+                    .cb-process-left .cb-sub { margin-left: auto; margin-right: auto; }
+                    .cb-process-img { margin: 32px auto 0; max-width: 320px; }
+                    .cb-wave { height: 60px; }
+                }
+
+                /* ══════════════════════════════════════════
+                   ≤640px — Mobile
+                ══════════════════════════════════════════ */
+                @media (max-width: 640px) {
+                    .cb-inner, .cb-band-inner { padding: 0 20px; }
+                    .cb-header-inner { padding: 0 20px; }
+                    .cb-header-phone-text { display: none; }
+                    .cb-header-right { gap: 10px; }
+                    .cb-hero { padding: 120px 0 110px; }
+                    .cb-hero-h1 { font-size: clamp(1.9rem, 8.5vw, 2.6rem); }
+                    .cb-hero-sub { font-size: 0.9rem; }
+                    .cb-hero-perks { gap: 14px; }
+                    .cb-form-card { padding: 32px 22px 26px; border-radius: 28px 28px 28px 10px; }
+                    .cb-form-card::before { display: none; }
+                    .cb-form-title { font-size: 17px; }
+                    .cb-actions { flex-direction: column; align-items: stretch; width: 100%; }
+                    .cb-actions .cb-btn { width: 100%; }
+                    .cb-h2 { font-size: clamp(1.6rem, 7vw, 2.2rem); }
+                    .cb-section-head { margin-bottom: 36px; }
+                    .cb-agency, .cb-portfolio, .cb-why, .cb-process, .cb-testimonials, .cb-final { padding: 64px 0; }
+                    .cb-feature-grid { grid-template-columns: 1fr; gap: 16px; }
+                    .cb-band-line { font-size: 15px; }
+                    .cb-band-img { height: 200px; }
+                    .cb-tabs { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; margin: 0 -20px 32px; padding: 0 20px 6px; scrollbar-width: none; }
+                    .cb-tabs::-webkit-scrollbar { display: none; }
+                    .cb-tab { white-space: nowrap; flex-shrink: 0; }
+                    .cb-gallery { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+                    .cb-gallery-item { border-radius: 12px; }
+                    .cb-why-grid { grid-template-columns: 1fr; gap: 16px; }
+                    .cb-why-card { padding: 24px; }
+                    .cb-step { grid-template-columns: 1fr; gap: 10px; padding: 22px; }
+                    .cb-step-num { font-size: 34px; }
+                    .cb-tp-card { padding: 20px; }
+                    .cb-tp-summary { padding: 16px; margin-bottom: 32px; text-align: center; }
+                    .cb-tp-label { font-size: 18px; }
+                    .cb-logo-img { height: 42px; }
+                    .cb-tp-text { font-size: 14px; }
+                    .cb-footer-inner { grid-template-columns: 1fr; padding: 56px 20px 36px; gap: 40px; }
+                    .cb-footer-bottom { padding: 20px; flex-direction: column; text-align: center; align-items: center; }
+                    .cb-wave { height: 40px; }
+                }
+
+                /* ══════════════════════════════════════════
+                   ≤380px — Small Mobile
+                ══════════════════════════════════════════ */
+                @media (max-width: 380px) {
+                    .cb-inner, .cb-band-inner, .cb-header-inner { padding: 0 14px; }
+                    .cb-hero-h1 { font-size: 1.65rem; }
+                    .cb-h2 { font-size: 1.45rem; }
+                    .cb-logo-img { height: 36px; }
+                    .cb-gallery { grid-template-columns: 1fr 1fr; gap: 8px; }
+                }
+
+                @media (prefers-reduced-motion: reduce) {
+                    .cb-main *, .cb-main *::before, .cb-main *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+                }
+                    /* ── Mobile ticker ── */
+.cb-ticker {
+    overflow: hidden;
+    background: #e8391d;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    padding: 8px 0;
+    white-space: nowrap;
+    
+}
+.cb-ticker-track {
+    display: flex;
+    width: max-content;
+    animation: cb-ticker-scroll 28s linear infinite;
+}
+.cb-ticker:hover .cb-ticker-track { animation-play-state: paused; }
+.cb-ticker-group { display: flex; }
+.cb-ticker-item { display: inline-flex; align-items: center; }
+.cb-ticker-sep { margin: 0 18px; }
+
+@keyframes cb-ticker-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+/* Hide on tablet and desktop */
+@media (min-width: 768px) {
+    .cb-ticker { display: none; }
+}
+
+/* No scrolling for visitors who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .cb-ticker-track { animation: none; }
+    .cb-ticker { text-align: center; white-space: normal; padding: 8px 16px; line-height: 1.4; }
+    .cb-ticker-track { width: auto; justify-content: center; }
+    .cb-ticker-group:not(:first-child),
+    .cb-ticker-item:not(:first-child),
+    .cb-ticker-sep { display: none; }
+}
+            `}</style>
+
+            <main id="top" className="cb-main">
+                <Header />
+
+                {/* ═══ SECTION 1: HERO ═══ */}
+                <section className="cb-hero">
+                    <img
+                        src="/images/page/image.png"
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover [mask-image:linear-gradient(to_bottom,black,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black,transparent)]"
+                    />
+                    {/* Black overlay */}
+                    <div className="pointer-events-none absolute inset-0 bg-black/50" aria-hidden="true" />
+                    <div className="cb-hero-dots" />
+                    <div className="cb-hero-glow" />
+                    <motion.span className="cb-float f1" animate={{ y: [0, -14, 0] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }} />
+                    <motion.span className="cb-float f2" animate={{ y: [0, 12, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }} />
+                    <motion.span className="cb-float f3" animate={{ rotate: 360 }} transition={{ duration: 18, repeat: Infinity, ease: "linear" }} />
+                    <motion.span className="cb-float f4" animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }} />
+
+                    <motion.div className="cb-hero-kid left" initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, delay: 0.8, ease: smoothEase }}>
+                        <Img src={IMG.heroLeft} alt="" />
+                    </motion.div>
+                    <motion.div className="cb-hero-kid right" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, delay: 1, ease: smoothEase }}>
+                        <Img src={IMG.heroRight} alt="" />
+                    </motion.div>
+
+                    <div className="cb-inner">
+                        <div className="cb-hero-grid">
+                            <div className="cb-hero-copy">
+                                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.3 }}>
+                                    <Eyebrow>Children's Book Illustration</Eyebrow>
+                                </motion.div>
+                                <motion.h1 variants={maskReveal} initial="hidden" animate="visible" className="cb-hero-h1">
+                                    Bring Your Story To Life With{" "}
+                                    <span className="scribble">
+                                        Custom
+                                        <svg viewBox="0 0 300 18" preserveAspectRatio="none" aria-hidden="true">
+                                            <path d="M2 12 C60 2, 120 16, 180 7 S270 4, 298 10" stroke="#ffc83d" strokeWidth="5" fill="none" strokeLinecap="round" />
+                                        </svg>
+                                    </span>
+                                    <span className="accent">Illustrations</span>
+                                </motion.h1>
+                                <motion.p variants={fadeUp} initial="hidden" animate="visible" className="cb-hero-sub">
+                                    Turn your ideas into vibrant, memorable artwork with custom illustrations created specifically for your book. From lovable characters to imaginative scenes, we help make every page visually unforgettable.
+                                </motion.p>
+                                <motion.div variants={fadeUp} initial="hidden" animate="visible"><ActionButtons /></motion.div>
+                                <motion.div className="cb-hero-perks" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>
+                                    <span className="cb-hero-perk"><Sparkles size={16} /> Unlimited Revisions</span>
+                                    <span className="cb-hero-perk"><Timer size={16} /> First Draft in 4–7 Days</span>
+                                    <span className="cb-hero-perk"><ShieldCheck size={16} /> 100% Ownership</span>
+                                </motion.div>
+                            </div>
+                            <LeadForm />
+                        </div>
+                    </div>
+                    <Wave fill="#faf9f7" />
+                </section>
+
+                {/* ═══ SECTION 2: CREATIVE ILLUSTRATION STUDIO ═══ */}
+                <section className="cb-agency" ref={agencyRef}>
+                    <div className="cb-inner">
+                        <div className="cb-agency-grid">
+                            <motion.div
+                                className="cb-agency-img"
+                                initial={{ clipPath: "inset(100% 0% 0% 0% round 24px)" }}
+                                animate={agencyInView ? { clipPath: "inset(0% 0% 0% 0% round 24px)" } : {}}
+                                transition={{ duration: 1.4, ease: smoothEase }}
+                            >
+                                <span className="cb-agency-blob" />
+                                <Img src={IMG.agency} alt="Illustrated children's books" />
+                            </motion.div>
+
+                            <motion.div variants={staggerContainer} initial="hidden" animate={agencyInView ? "visible" : "hidden"}>
+                                <motion.div variants={fadeUp}><Eyebrow>Creative Illustration Studio</Eyebrow></motion.div>
+                                <motion.h2 variants={maskReveal} className="cb-h2">
+                                    CHILDREN'S BOOK ILLUSTRATION <span className="accent">THAT STANDS OUT</span>
+                                </motion.h2>
+                                <motion.p variants={fadeUp} className="cb-agency-body">
+                                    Bring your story to life with expressive, professionally crafted illustrations designed for young readers. From character development to full-page scenes, we create artwork that captures the heart of your story and gives your book a polished, memorable look.
+                                </motion.p>
+                                <motion.div variants={staggerContainer} className="cb-feature-grid">
+                                    {agencyFeatures.map(({ icon: Icon, title }) => (
+                                        <motion.div key={title} variants={fadeUp} className="cb-feature">
+                                            <div className="cb-feature-icon"><Icon size={20} /></div>
+                                            <p>{title}</p>
+                                        </motion.div>
+                                    ))}
+                                </motion.div>
+                            </motion.div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* ═══ SECTION 3: CTA BAND ═══ */}
+                <CtaBand
+                    line="Ready to turn your story into unforgettable illustrations?"
+                    title="LET'S CREATE SOMETHING AMAZING!"
+                    image={IMG.cta1}
+                    imageAlt="Girl reading a picture book"
+                />
+
+                {/* ═══ SECTION 4: PORTFOLIO ═══ */}
+                <Portfolio />
+
+                {/* ═══ SECTION 5: WHY CHOOSE US ═══ */}
+                <section className="cb-why">
+                    <div className="cb-inner">
+                        <div className="cb-section-head center">
+                            <Eyebrow center>Why Choose Us</Eyebrow>
+                            <motion.h2 variants={maskReveal} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-h2">
+                                WHY AUTHORS CHOOSE OUR <span className="accent">BOOK ILLUSTRATION SERVICES</span>
+                            </motion.h2>
+                            <p className="cb-sub">We combine creativity, collaboration, and professional execution to make the illustration process simple from start to finish. Every detail is shaped around your story, audience, and publishing goals.</p>
+                        </div>
+                        <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} className="cb-why-grid">
+                            {whyCards.map(({ icon: Icon, title, desc }) => (
+                                <motion.div key={title} variants={fadeUp} className="cb-why-card">
+                                    <div className="cb-why-top">
+                                        <div className="cb-why-icon"><Icon size={24} /></div>
+                                        <h3 className="cb-why-title">{title}</h3>
+                                    </div>
+                                    <p className="cb-why-desc">{desc}</p>
+                                </motion.div>
+                            ))}
+                        </motion.div>
+                    </div>
+                </section>
+
+                {/* ═══ SECTION 6: CTA BAND 2 (not covered in the content doc — original copy kept) ═══ */}
+                <CtaBand
+                    line="Share your ideas with us for best-in-class book illustrations."
+                    title="TALK TO US TODAY!"
+                    image={IMG.cta2}
+                    imageAlt="Boy standing beside a stack of books"
+                />
+
+                {/* ═══ SECTION 7: PROCESS ═══ */}
+                <section id="process" className="cb-process">
+                    <div className="cb-process-dots" />
+                    <div className="cb-inner">
+                        <div className="cb-process-grid">
+                            <div className="cb-process-left">
+                                <Eyebrow>How It Works</Eyebrow>
+                                <motion.h2 variants={maskReveal} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-h2 light">
+                                    OUR BOOK ILLUSTRATION <span className="accent">PROCESS</span>
+                                </motion.h2>
+                                <p className="cb-sub">From your first idea to the final artwork, our process keeps every stage clear, collaborative, and focused on bringing your story to life.</p>
+                                <motion.div className="cb-process-img" initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.8, ease: smoothEase }}>
+                                    <Img src={IMG.process} alt="Illustrated girl character" />
+                                </motion.div>
+                            </div>
+
+                            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }} className="cb-steps">
+                                {processSteps.map(({ step, title, desc }) => (
+                                    <motion.div key={step} variants={fadeUp} className="cb-step">
+                                        <div className="cb-step-num">{step}<small>STEP</small></div>
+                                        <div><h3>{title}</h3><p>{desc}</p></div>
+                                    </motion.div>
+                                ))}
+                                <motion.div variants={fadeUp}>
+                                    <button type="button" className="cb-btn cb-btn-primary" onClick={getStarted}>Start Your Project <ArrowRight size={16} /></button>
+                                </motion.div>
+                            </motion.div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* ═══ SECTION 8: TESTIMONIALS ═══ */}
+                <Testimonials />
+
+                {/* ═══ SECTION 9: FINAL CTA ═══ */}
+                <section className="cb-final">
+                    <div className="cb-inner">
+                        <div className="cb-final-grid">
+                            <motion.div className="cb-final-img" initial={{ opacity: 0, x: -40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.9, ease: smoothEase }}>
+                                <Img src={IMG.finalLeft} alt="Child drawing" />
+                            </motion.div>
+                            <div className="cb-final-center">
+                                <Eyebrow center>Start Your Project</Eyebrow>
+                                <motion.h2 variants={maskReveal} initial="hidden" whileInView="visible" viewport={{ once: true }} className="cb-h2">
+                                    TURN YOUR STORY INTO <span className="accent">BEAUTIFUL ILLUSTRATIONS</span>
+                                </motion.h2>
+                                <p className="cb-sub">Work with experienced illustrators to create engaging artwork that captures your story, connects with young readers, and gives your book a professional finish.</p>
+                                <ActionButtons dark />
+                            </div>
+                            <motion.div className="cb-final-img" initial={{ opacity: 0, x: 40 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.9, ease: smoothEase }}>
+                                <Img src={IMG.finalRight} alt="Illustrated girl character" />
+                            </motion.div>
+                        </div>
+                    </div>
+                </section>
+                <CallBar />
+                <Footer />
+                <GetStartedPopup variant="veterans" />
+            </main>
+        </>
+    );
+}
