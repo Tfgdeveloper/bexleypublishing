@@ -197,6 +197,40 @@ const sections: Section[] = [
         ),
     },
     {
+        id: "pseudonym-policy",
+        title: "Pseudonym policy",
+        body: (
+            <>
+                <p>
+                    We follow a pseudonym policy to ensure consistency, convenience, and a seamless
+                    communication experience for our customers.
+                </p>
+                <p>
+                    To avoid confusion or inconvenience when a customer is assigned a new account manager, we
+                    use pseudonyms to maintain a consistent point of contact. This allows our customers to
+                    build familiarity, maintain continuity in communication, and easily remember the names of
+                    their representatives.
+                </p>
+                <p>
+                    Additionally, as our team consists of professionals from diverse geographical regions and
+                    cultural backgrounds, using pseudonyms helps us maintain a consistent and unified
+                    organizational identity while ensuring a professional and standardized customer
+                    experience.
+                </p>
+
+                <h3>Opt-out</h3>
+                <p>
+                    You can opt out of SMS communications at any time by replying "STOP" to any text message
+                    you receive from us.
+                </p>
+                <p>
+                    To unsubscribe from our email communications, click the "Unsubscribe" link included in any
+                    of our emails or contact us directly at <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.
+                </p>
+            </>
+        ),
+    },
+    {
         id: "third-party",
         title: "Third-party links",
         body: (
@@ -427,6 +461,14 @@ const styles = `
     /* Highlight the section you jumped to from the contents list */
     .pp-section:target h2 { color: #ff6b4a; }
 
+    .pp-section h3 {
+        color: white;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.4;
+        margin: 24px 0 10px;
+    }
+
     .pp-section p,
     .pp-section li {
         font-size: 15px;
@@ -542,6 +584,7 @@ const styles = `
         .pp-toc ol { columns: 1; }
         .pp-content { padding: 28px 20px; border-radius: 16px; }
         .pp-section h2 { font-size: 1.15rem; }
+        .pp-section h3 { font-size: 1rem; }
         .pp-section p, .pp-section li { font-size: 14px; }
         .pp-btn-primary, .pp-btn-ghost { font-size: 11px; padding: 13px 20px; }
         .pp-contact-footer { gap: 20px; }
@@ -559,7 +602,7 @@ export default function PrivacyPolicyPage() {
     return (
         <>
             <style>{styles}</style>
-            <Navbar2/>
+            <Navbar2 />
             <div className="pp-page ">
                 <div className="pp-glow" />
                 <div className="pp-grid-bg" />
@@ -568,7 +611,7 @@ export default function PrivacyPolicyPage() {
                 <div className="pp-inner">
                     {/* Hero */}
                     <header className="pp-hero">
-                        
+
 
                         <div className="pp-marker pp-anim pp-d0">
                             <span className="pp-marker-line" />
@@ -614,10 +657,10 @@ export default function PrivacyPolicyPage() {
                     </div>
 
                     {/* Footer */}
-                    
+
                 </div>
             </div>
-            <Footer/>
+            <Footer />
         </>
     );
 }

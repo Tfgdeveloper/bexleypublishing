@@ -27,7 +27,7 @@ type VariantKey = "halloween" | "veterans";
 const VARIANTS = {
     halloween: {
         // Ends at midnight after Halloween (visitor's local time). Months are 0-based: 10 = November.
-        endsAt: new Date(2026, 10, 1, 0, 0, 0),
+        endsAt: new Date(2026, 10, 26, 0, 0, 0),
         image: "/images/popup/popup6.png",
         title: `Claim ${DISCOUNT} off — sign up before the offer ends`,
         shell: "bg-[#140c08] ring-[#f04a14]/40",

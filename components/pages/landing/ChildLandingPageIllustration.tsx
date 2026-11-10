@@ -5,6 +5,7 @@ import {
     ArrowRight, MessageCircle, Phone, Mail, MapPin, Send, Star, X,
     ShieldCheck, Wallet, Timer, RefreshCw, Lightbulb, Clock, Award, ImageIcon, Sparkles, Palette, FileCheck,
     Leaf,
+    Bird,
 } from "lucide-react";
 import CallBar from "./CallBar";
 import ContactForm from "@/components/Contact-form";
@@ -227,7 +228,23 @@ function Wave({ fill, flip = false }: { fill: string; flip?: boolean }) {
 /* ══════════════════════════════════════════════════════════════
    HEADER
 ══════════════════════════════════════════════════════════════ */
-const TICKER_TEXT = "Bring your characters to life with beautiful, creative illustrations. Limited-Time Veterans Day Offer – Claim Your 50% OFF Today!";
+const TICKER_TEXT = "Thanksgiving Special! Bring Your Children’s Book to Life with Beautiful Illustrations – Get 50% OFF!";
+
+const TickerContent = () => (
+    <span
+        style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            whiteSpace: "nowrap",
+            paddingRight: 40,
+        }}
+    >
+        <Leaf size={18} color="#FCD34D" fill="#F59E0B" strokeWidth={2} />
+        <span style={{ fontWeight: 600 }}>{TICKER_TEXT}</span>
+        <Bird size={18} color="#FDE68A" fill="#B45309" strokeWidth={2} />
+    </span>
+);
 
 function Header() {
     const [scrolled, setScrolled] = useState(false);
@@ -242,13 +259,13 @@ function Header() {
     return (
         <header className={`cb-header ${scrolled ? "scrolled" : ""}`}>
             {/* Mobile-only ticker */}
-            <div className="cb-ticker mb-4 -mt-5"  role="marquee" aria-label={TICKER_TEXT}>
+            <div className="cb-ticker mb-4 -mt-5" role="marquee" aria-label={TICKER_TEXT}>
                 <div className="cb-ticker-track" aria-hidden="true">
                     {[0, 1].map((group) => (
                         <div className="cb-ticker-group" key={group}>
                             {[0, 1, 2].map((i) => (
                                 <span className="cb-ticker-item" key={i}>
-                                    {TICKER_TEXT}
+                                    <TickerContent />
                                     <span className="cb-ticker-sep"></span>
                                 </span>
                             ))}
@@ -977,7 +994,7 @@ export default function ChildLandingPageIllustration() {
                 {/* ═══ SECTION 1: HERO ═══ */}
                 <section className="cb-hero">
                     <img
-                        src="/images/page/image.png"
+                        src="/images/page/thanksgiving.webp"
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover [mask-image:linear-gradient(to_bottom,black,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black,transparent)]"
                     />
@@ -1164,7 +1181,7 @@ export default function ChildLandingPageIllustration() {
                 </section>
                 <CallBar />
                 <Footer />
-                <GetStartedPopup variant="veterans" />
+                <GetStartedPopup variant="halloween" />
             </main>
         </>
     );

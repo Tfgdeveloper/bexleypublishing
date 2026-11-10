@@ -46,6 +46,23 @@ export default function RootLayout({
         </Script>
         {/* End Google Tag Manager */}
 
+        {/* Google Analytics */}
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-3QFTLTB8ZC"
+          strategy="beforeInteractive"
+        />
+
+        <Script id="google-analytics" strategy="beforeInteractive">
+          {`
+                        window.dataLayer = window.dataLayer || [];
+                        function gtag(){dataLayer.push(arguments);}
+                        gtag('js', new Date());
+                        gtag('config', 'G-3QFTLTB8ZC');
+                    `}
+        </Script>
+
+
         <Script id="facebook-pixel" strategy="beforeInteractive">
           {`
             !function(f,b,e,v,n,t,s)
@@ -71,16 +88,19 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-full flex flex-col">
-        {/* Google Tag Manager (noscript) */}
+
         <noscript>
           <iframe
             src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
             height="0"
             width="0"
-            style={{ display: "none", visibility: "hidden" }}
+            style={{
+              display: "none",
+              visibility: "hidden",
+            }}
+            title="Google Tag Manager"
           />
         </noscript>
-        {/* End Google Tag Manager (noscript) */}
 
         <RouteTracker />
         {children}
@@ -96,8 +116,8 @@ export default function RootLayout({
         </noscript>
 
         <LiveChat />
-        
+
       </body>
-    </html>
+    </html >
   );
 }

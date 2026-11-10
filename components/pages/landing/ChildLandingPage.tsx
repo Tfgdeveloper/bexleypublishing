@@ -4,11 +4,13 @@ import { AnimatePresence, motion, useInView, Variants } from "framer-motion";
 import {
     ArrowRight, MessageCircle, Phone, Mail, MapPin, Send, Star, X, BadgeCheck,
     ShieldCheck, Users, Wallet, Timer, RefreshCw, Lightbulb, Clock, LayoutGrid, Award, ImageIcon, Sparkles,
-    Globe,
+    Globe, Leaf,
+    Bird,
 } from "lucide-react";
 import CallBar from "./CallBar";
 import ContactForm from "@/components/Contact-form";
 import { landingHeroTheme, landingFooterTheme, landingPopupTheme, darkIconTheme } from "@/components/contactFormThemes";
+
 
 
 import { NewPopupTheme } from "@/components/contactFormThemes";
@@ -219,8 +221,16 @@ function Wave({ fill, flip = false }: { fill: string; flip?: boolean }) {
    HEADER
 ══════════════════════════════════════════════════════════════ */
 
-const TICKER_TEXT = "Bring your story to life and inspire young readers. Limited-Time Veterans Day Offer – Claim Your 50% OFF Today!";
+const TICKER_TEXT =
+    "Thanksgiving Special! Bring Your Children’s Book to Life – Get 50% OFF on Publishing Today!";
 
+const TickerContent = () => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+        <Leaf size={16} color="#FFFFFF" fill="#FBBF24" strokeWidth={2} style={{ flexShrink: 0 }} />
+        <span>{TICKER_TEXT}</span>
+        <Bird size={16} color="#FFFFFF" fill="#B45309" strokeWidth={2} style={{ flexShrink: 0 }} />
+    </span>
+);
 
 function Header() {
     const [scrolled, setScrolled] = useState(false);
@@ -234,13 +244,13 @@ function Header() {
 
     return (
         <header className={`cb-header ${scrolled ? "scrolled" : ""}`}>
-            <div className="cb-ticker mb-4 -mt-5"  role="marquee" aria-label={TICKER_TEXT}>
+            <div className="cb-ticker mb-4 -mt-5" role="marquee" aria-label={TICKER_TEXT}>
                 <div className="cb-ticker-track" aria-hidden="true">
                     {[0, 1].map((group) => (
                         <div className="cb-ticker-group" key={group}>
                             {[0, 1, 2].map((i) => (
                                 <span className="cb-ticker-item" key={i}>
-                                    {TICKER_TEXT}
+                                    <TickerContent />
                                     <span className="cb-ticker-sep"></span>
                                 </span>
                             ))}
@@ -423,7 +433,7 @@ function Testimonials() {
                                         <span className="cb-tp-avatar" aria-hidden="true">{name.split(" ").map((n) => n[0]).join("").slice(0, 2)}</span>
                                         <div className="cb-tp-who">
                                             <p className="cb-tp-name">{name}</p>
-                                            
+
                                         </div>
                                     </header>
                                     <div className="cb-tp-rowline">
@@ -432,7 +442,7 @@ function Testimonials() {
                                     </div>
                                     <h3 className="cb-tp-title">{title}</h3>
                                     <p className="cb-tp-text">{quote}</p>
-                                    
+
                                 </article>
                             </div>
                         ))}
@@ -962,7 +972,7 @@ export default function ChildLandingPage() {
                 {/* ═══ SECTION 1: HERO ═══ */}
                 <section className="cb-hero">
                     <img
-                        src="/images/page/image.png"
+                        src="/images/page/thanksgiving.webp"
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover [mask-image:linear-gradient(to_bottom,black,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black,transparent)]"
                     />
@@ -1140,7 +1150,7 @@ export default function ChildLandingPage() {
 
                 <Footer />
                 <CallBar />
-                <GetStartedPopup variant="veterans" />
+                <GetStartedPopup variant="halloween" />
             </main>
         </>
     );

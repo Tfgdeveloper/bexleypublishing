@@ -6,6 +6,8 @@ import {
     PenTool, SpellCheck, Palette, LayoutTemplate, Globe, Megaphone, Headphones, MonitorSmartphone,
     CalendarDays, PhoneCall, Trophy, BookOpen, Users, Percent, Crown, ShieldCheck, Handshake,
     FileText, Rocket, Search, Award,
+    Leaf,
+    Bird,
 } from "lucide-react";
 import CallBar from "./CallBar";
 import ContactForm from "@/components/Contact-form";
@@ -298,7 +300,24 @@ function TrustStars({ rating, size = 22 }: { rating: number; size?: number }) {
     );
 }
 
-const TICKER_TEXT = "Turn your manuscript into a professionally published book and share your story with the world. Limited-Time Veterans Day Offer – Claim Your 50% OFF Today!";
+
+const TICKER_TEXT = "Thanksgiving Special! Publish Your Dream Book with Professional Publishing Services – Get 50% OFF!";
+
+const TickerContent = () => (
+    <span
+        style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            whiteSpace: "nowrap",
+            paddingRight: 40,
+        }}
+    >
+        <Leaf size={18} color="#FCD34D" fill="#F59E0B" strokeWidth={2} />
+        <span style={{ fontWeight: 600 }}>{TICKER_TEXT}</span>
+        <Bird size={18} color="#FDE68A" fill="#B45309" strokeWidth={2} />
+    </span>
+);
 
 
 function Header() {
@@ -317,7 +336,7 @@ function Header() {
                         <div className="cb-ticker-group" key={group}>
                             {[0, 1, 2].map((i) => (
                                 <span className="cb-ticker-item" key={i}>
-                                    {TICKER_TEXT}
+                                    <TickerContent />
                                     <span className="cb-ticker-sep"></span>
                                 </span>
                             ))}
@@ -371,7 +390,7 @@ function Hero() {
         <section className="pb-hero">
                 
                     <img
-                        src="/images/page/image.png"
+                        src="/images/page/thanksgiving2.webp"
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover [mask-image:linear-gradient(to_bottom,black,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black,transparent)]"
                     />
@@ -1281,7 +1300,7 @@ export default function PublishingLandingPage() {
                 <Faq />
                 <Footer />
                 <CallBar />
-                <GetStartedPopup variant="veterans" />
+                <GetStartedPopup variant="halloween" />
             </main>
         </>
     );
